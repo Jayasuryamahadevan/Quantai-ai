@@ -9,6 +9,7 @@ import logging
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from temporalio.client import Client
 from temporalio.exceptions import WorkflowAlreadyStartedError
@@ -94,6 +95,43 @@ async def start_job(payload: AnalysisJobRequest, request: Request):
         "status": "queued",
         "status_url": f"/api/analysis/jobs/{workflow_id}",
     }
+
+
+@router.get("/reports/{run_id}")
+async def get_approved_report(run_id: UUID, request: Request):
+    """Serve the exact approved PDF artifact, never re-execute its SQL."""
+    from sqlalchemy import select
+
+    from app.orchestration.report_store import approved_report_path
+    from app.storage.database import app_session
+    from app.storage.models import Export, QueryRun
+
+    # The durable API is disabled by default and restricted to trusted local use.
+    await _client(request)
+    run_key = str(run_id)
+    with app_session() as db:
+        run = db.get(QueryRun, run_key)
+        if run is None or run.status != "success":
+            raise HTTPException(404, "Approved report not found")
+        artifact = db.execute(
+            select(Export.file_path)
+            .where(Export.run_id == run_key, Export.format == "pdf")
+            .order_by(Export.created_at.desc())
+            .limit(1)
+        ).scalar_one_or_none()
+    if artifact is None:
+        raise HTTPException(404, "Approved report not found")
+    try:
+        report_path = approved_report_path(artifact, get_settings().exports_dir)
+    except (ValueError, OSError) as exc:
+        log.warning("Approved report artifact missing or invalid for run %s", run_key)
+        raise HTTPException(404, "Approved report artifact not found") from exc
+
+    return FileResponse(
+        report_path,
+        filename=f"quantai_approved_{run_key}.pdf",
+        media_type="application/pdf",
+    )
 
 
 @router.get("/{job_id}")
