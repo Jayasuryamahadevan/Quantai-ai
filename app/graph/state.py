@@ -14,19 +14,7 @@ from typing_extensions import TypedDict
 # ─────────────────────────────────────────────────────────────────────────────
 # DataFrame / result cache (never serialized, never sent to LLM)
 # ─────────────────────────────────────────────────────────────────────────────
-_RESULT_CACHE: dict[str, Any] = {}
-
-
-def cache_put(run_id: str, key: str, value: Any) -> None:
-    _RESULT_CACHE.setdefault(run_id, {})[key] = value
-
-
-def cache_get(run_id: str, key: str, default: Any = None) -> Any:
-    return _RESULT_CACHE.get(run_id, {}).get(key, default)
-
-
-def cache_clear(run_id: str) -> None:
-    _RESULT_CACHE.pop(run_id, None)
+from app.core.result_cache import cache_clear, cache_get, cache_put
 
 
 # ─────────────────────────────────────────────────────────────────────────────

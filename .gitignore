@@ -50,6 +50,9 @@ data/dictionaries/*
 !data/embeddings/.gitkeep
 !data/dictionaries/.gitkeep
 
+# Generated local Chroma vector index; tracked history must be cleaned separately.
+data/chroma_db/
+
 # Frontend
 frontend/node_modules/
 frontend/dist/

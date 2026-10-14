@@ -42,7 +42,7 @@ async def main():
     print("Importing sample data...")
     Base.metadata.create_all(get_app_engine())
     
-    result = await import_file(file_path, "sample_retail.csv")
+    result = await asyncio.to_thread(import_file, file_path, "sample_retail.csv")
     
     source_id = str(uuid.uuid4())
     with app_session() as session:
