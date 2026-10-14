@@ -90,7 +90,7 @@ def _looks_like_date(samples: list[str]) -> bool:
     return sum(1 for s in samples if date_re.search(s)) >= len(samples) // 2
 
 
-async def import_file(
+def import_file(
     file_path: Path,
     source_name: str,
 ) -> dict[str, Any]:

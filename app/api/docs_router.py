@@ -58,8 +58,14 @@ async def upload_document(file: UploadFile = File(...)):
 
 @router.get("/plot/{filename}")
 async def get_plot(filename: str):
-    plot_path = UPLOAD_DIR / filename
-    if plot_path.exists():
+    # Plot endpoint must not read arbitrary files from the upload directory.
+    # Generated plot artifacts are SVG/PNG only.
+    if Path(filename).name != filename or Path(filename).suffix.lower() not in {".png", ".svg"}:
+        raise HTTPException(status_code=400, detail="Invalid plot filename")
+    plot_path = (UPLOAD_DIR / filename).resolve()
+    if not plot_path.is_relative_to(UPLOAD_DIR.resolve()):
+        raise HTTPException(status_code=400, detail="Invalid plot path")
+    if plot_path.is_file():
         return FileResponse(plot_path)
     return JSONResponse(status_code=404, content={"detail": "Plot not found"})
 

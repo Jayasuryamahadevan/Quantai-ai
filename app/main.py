@@ -340,7 +340,7 @@ def create_app() -> FastAPI:
             log.info("Uploaded %s (%d bytes)", filename, total_bytes)
 
             from app.utils.import_pipeline import import_file
-            result = await import_file(upload_path, filename)
+            result = await run_in_threadpool(import_file, upload_path, filename)
 
             # Register source in DB
             source_id = await _register_source(

@@ -12,6 +12,8 @@ from __future__ import annotations
 import logging
 from typing import Any, Optional
 
+from app.security.sql_literals import quote_identifier, sql_literal, validated_direction, validated_limit
+
 log = logging.getLogger(__name__)
 
 # Mapping from plan agg names to MySQL aggregate functions
@@ -44,13 +46,8 @@ OP_MAP = {
 
 
 def _quote(name: str) -> str:
-    """Backtick-quote a MySQL identifier."""
-    if name.startswith("`") and name.endswith("`"):
-        return name
-    # If it contains SQL function-like patterns, don't quote
-    if "(" in name or "DATE_FORMAT" in name.upper():
-        return name
-    return f"`{name}`"
+    """Quote a validated column or supported month-grouping expression."""
+    return quote_identifier(name)
 
 
 def _build_metric_expr(metric: dict[str, Any], median_col_alias: str | None = None) -> tuple[str, str]:
@@ -60,7 +57,7 @@ def _build_metric_expr(metric: dict[str, Any], median_col_alias: str | None = No
     """
     col = metric["column"]
     agg = metric.get("agg", "sum").lower()
-    quoted_col = _quote(col)
+    quoted_col = _quote(col) if agg != "count" else "*"
 
     if agg == "count_distinct":
         expr = f"COUNT(DISTINCT {quoted_col})"
@@ -69,15 +66,14 @@ def _build_metric_expr(metric: dict[str, Any], median_col_alias: str | None = No
         # MySQL median via window function inline — handled in _build_median_cte
         expr = f"AVG({quoted_col})"  # placeholder; will be replaced by caller
         alias = f"median_{col}"
-    elif agg in AGG_MAP and AGG_MAP[agg]:
-        expr = f"{AGG_MAP[agg]}({quoted_col})"
-        alias = f"{agg}_{col}"
     elif agg == "count":
         expr = "COUNT(*)"
         alias = "count"
+    elif agg in AGG_MAP and AGG_MAP[agg]:
+        expr = f"{AGG_MAP[agg]}({quoted_col})"
+        alias = f"{agg}_{col}"
     else:
-        expr = f"SUM({quoted_col})"
-        alias = f"sum_{col}"
+        raise ValueError(f"Unsupported aggregate: {agg}")
 
     return expr, alias
 
@@ -90,25 +86,33 @@ def _build_filter_clause(filters: list[dict[str, Any]]) -> str:
     parts = []
     for flt in filters:
         col = _quote(flt["column"])
-        op = OP_MAP.get(str(flt.get("op", "=")).lower(), "=")
+        raw_op = str(flt.get("op", "=")).lower()
+        if raw_op not in OP_MAP:
+            raise ValueError(f"Unsupported filter operator: {raw_op}")
+        op = OP_MAP[raw_op]
         value = flt.get("value")
 
         if op in ("IS NULL", "IS NOT NULL"):
             parts.append(f"{col} {op}")
-        elif op == "IN":
+        elif op in ("IN", "NOT IN"):
             vals = value if isinstance(value, list) else [value]
-            escaped = ", ".join(f"'{v}'" for v in vals)
-            parts.append(f"{col} IN ({escaped})")
+            if not vals:
+                raise ValueError("IN filter cannot be empty")
+            escaped = ", ".join(sql_literal(v) for v in vals)
+            parts.append(f"{col} {op} ({escaped})")
         elif op == "BETWEEN":
-            if isinstance(value, list) and len(value) == 2:
-                parts.append(f"{col} BETWEEN '{value[0]}' AND '{value[1]}'")
+            if not isinstance(value, list) or len(value) != 2:
+                raise ValueError("BETWEEN requires exactly two values")
+            parts.append(f"{col} BETWEEN {sql_literal(value[0])} AND {sql_literal(value[1])}")
+        elif value is None:
+            if op == "=":
+                parts.append(f"{col} IS NULL")
+            elif op == "!=":
+                parts.append(f"{col} IS NOT NULL")
+            else:
+                raise ValueError("NULL supports only equality comparisons")
         else:
-            # Numeric detection: don't quote if numeric
-            try:
-                float(str(value))
-                parts.append(f"{col} {op} {value}")
-            except (ValueError, TypeError):
-                parts.append(f"{col} {op} '{value}'")
+            parts.append(f"{col} {op} {sql_literal(value)}")
 
     return "WHERE " + " AND ".join(parts)
 
@@ -120,12 +124,12 @@ def _build_time_clause(time_range: Optional[dict[str, Any]], existing_filters: l
     col = _quote(time_range["column"])
     start = time_range.get("start")
     end = time_range.get("end")
-    if start and end:
-        return f"{col} BETWEEN '{start}' AND '{end}'"
-    elif start:
-        return f"{col} >= '{start}'"
-    elif end:
-        return f"{col} <= '{end}'"
+    if start is not None and end is not None:
+        return f"{col} BETWEEN {sql_literal(start)} AND {sql_literal(end)}"
+    elif start is not None:
+        return f"{col} >= {sql_literal(start)}"
+    elif end is not None:
+        return f"{col} <= {sql_literal(end)}"
     return ""
 
 
@@ -148,14 +152,14 @@ def compile_plan(
     Raises:
         ValueError: If the plan cannot be compiled.
     """
-    tbl = f"`{schema_name}`.`{table_name}`" if schema_name else f"`{table_name}`"
+    tbl = f"{_quote(schema_name)}.{_quote(table_name)}" if schema_name else _quote(table_name)
     intent = plan.get("intent", "aggregate")
     metrics = plan.get("metrics", [])
     group_by = plan.get("group_by", [])
     filters = plan.get("filters", [])
     time_range = plan.get("time_range")
     order_by = plan.get("order_by", [])
-    limit = plan.get("limit", 1000)
+    limit = validated_limit(plan.get("limit", 1000))
 
     # ── Detect median metrics ────────────────────────────────────────────────
     median_metrics = [m for m in metrics if m.get("agg", "").lower() == "median"]
@@ -197,13 +201,13 @@ def compile_plan(
 
     # Group by columns first (must appear in SELECT for ONLY_FULL_GROUP_BY)
     for gb in group_by:
-        select_parts.append(_quote(gb) if "DATE_FORMAT" not in gb else gb)
+        select_parts.append(_quote(gb))
 
     # Metric expressions
     metric_aliases = []
     for m in other_metrics:
         expr, alias = _build_metric_expr(m)
-        select_parts.append(f"{expr} AS `{alias}`")
+        select_parts.append(f"{expr} AS {_quote(alias)}")
         metric_aliases.append(alias)
 
     # If no metrics at all, do SELECT *
@@ -215,7 +219,7 @@ def compile_plan(
 
     group_clause = ""
     if group_by:
-        quoted_groups = [_quote(g) if "DATE_FORMAT" not in g else g for g in group_by]
+        quoted_groups = [_quote(g) for g in group_by]
         group_clause = "GROUP BY " + ", ".join(quoted_groups)
 
     order_clause = ""
@@ -223,7 +227,7 @@ def compile_plan(
         order_parts = []
         for ob in order_by:
             col = ob["column"]
-            direction = ob.get("direction", "DESC").upper()
+            direction = validated_direction(ob.get("direction", "DESC"))
             
             # Check if col directly matches a metric alias
             matched_alias = None
@@ -238,11 +242,11 @@ def compile_plan(
                         break
 
             if matched_alias:
-                order_parts.append(f"`{matched_alias}` {direction}")
+                order_parts.append(f"{_quote(matched_alias)} {direction}")
             elif group_by and col not in group_by:
                 # If grouping is active and column is neither grouped nor a metric, order by first metric
                 if metric_aliases:
-                    order_parts.append(f"`{metric_aliases[0]}` {direction}")
+                    order_parts.append(f"{_quote(metric_aliases[0])} {direction}")
                 else:
                     order_parts.append(f"{_quote(group_by[0])} {direction}")
             else:
@@ -250,7 +254,7 @@ def compile_plan(
         order_clause = "ORDER BY " + ", ".join(order_parts)
     elif group_by and metric_aliases:
         # Default when grouping: order by first metric descending
-        order_clause = f"ORDER BY `{metric_aliases[0]}` DESC"
+        order_clause = f"ORDER BY {_quote(metric_aliases[0])} DESC"
 
     limit_clause = f"LIMIT {limit}" if limit else ""
 

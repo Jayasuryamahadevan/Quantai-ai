@@ -17,6 +17,15 @@ from app.graph.state import AgentState, cache_put
 log = logging.getLogger(__name__)
 
 
+def _run_readonly_sql(sql: str) -> pd.DataFrame:
+    """Execute a validated read-only query in the worker thread pool."""
+    from app.storage.database import readonly_session
+    from sqlalchemy import text
+
+    with readonly_session() as conn:
+        return pd.read_sql(text(sql), conn)
+
+
 async def column_selector_node(state: AgentState) -> dict[str, Any]:
     """Select top-K relevant columns for the question using embeddings."""
     t0 = time.perf_counter()
@@ -352,12 +361,9 @@ async def validate_and_execute_node(state: AgentState) -> dict[str, Any]:
             }
 
         # Execute with read-only user
-        import pandas as pd
-        from app.storage.database import readonly_session
-        from sqlalchemy import text
+        from starlette.concurrency import run_in_threadpool
 
-        with readonly_session() as conn:
-            result_df = pd.read_sql(text(guard.sql), conn)
+        result_df = await run_in_threadpool(_run_readonly_sql, guard.sql)
 
         # Cache the result DataFrame
         cache_put(run_id, "result_df", result_df)

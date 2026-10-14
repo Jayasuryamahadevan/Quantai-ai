@@ -12,6 +12,7 @@ from typing import Literal
 
 from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from sqlalchemy.engine import URL
 
 # Silence LangChain/LangSmith tracing unconditionally before any import
 os.environ.setdefault("LANGCHAIN_TRACING_V2", "false")
@@ -97,37 +98,32 @@ class Settings(BaseSettings):
     def pii_patterns_list(self) -> list[str]:
         return [p.strip().lower() for p in self.pii_column_patterns.split(",") if p.strip()]
 
+    def _mysql_dsn(self, username: str, password: str, database: str | None = None) -> str:
+        return URL.create(
+            drivername="mysql+pymysql",
+            username=username,
+            password=password,
+            host=self.mysql_host,
+            port=self.mysql_port,
+            database=database,
+            query={"charset": "utf8mb4"},
+        ).render_as_string(hide_password=False)
+
     @property
     def readonly_dsn(self) -> str:
-        return (
-            f"mysql+pymysql://{self.mysql_readonly_user}:{self.mysql_readonly_password}"
-            f"@{self.mysql_host}:{self.mysql_port}/{self.mysql_data_schema}"
-            f"?charset=utf8mb4"
-        )
+        return self._mysql_dsn(self.mysql_readonly_user, self.mysql_readonly_password, self.mysql_data_schema)
 
     @property
     def import_dsn(self) -> str:
-        return (
-            f"mysql+pymysql://{self.mysql_import_user}:{self.mysql_import_password}"
-            f"@{self.mysql_host}:{self.mysql_port}/{self.mysql_data_schema}"
-            f"?charset=utf8mb4"
-        )
+        return self._mysql_dsn(self.mysql_import_user, self.mysql_import_password, self.mysql_data_schema)
 
     @property
     def app_dsn(self) -> str:
-        return (
-            f"mysql+pymysql://{self.mysql_app_user}:{self.mysql_app_password}"
-            f"@{self.mysql_host}:{self.mysql_port}/{self.mysql_app_schema}"
-            f"?charset=utf8mb4"
-        )
+        return self._mysql_dsn(self.mysql_app_user, self.mysql_app_password, self.mysql_app_schema)
 
     @property
     def root_dsn(self) -> str:
-        return (
-            f"mysql+pymysql://root:{self.mysql_root_password}"
-            f"@{self.mysql_host}:{self.mysql_port}"
-            f"?charset=utf8mb4"
-        )
+        return self._mysql_dsn("root", self.mysql_root_password)
 
     @model_validator(mode="after")
     def _ensure_dirs(self) -> "Settings":
