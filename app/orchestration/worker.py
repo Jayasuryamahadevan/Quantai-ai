@@ -13,6 +13,9 @@ from app.orchestration.activities import (
     deliver_report, execute_agent_team, prepare_analysis, profile_source, publish_analysis, review_analysis,
 )
 from app.orchestration.workflow import AnalystWorkflow
+from app.orchestration.specialists import (
+    supervise_analysis, discover_schema, plan_analysis, execute_analysis,
+)
 
 
 async def main() -> None:
@@ -28,7 +31,8 @@ async def main() -> None:
             task_queue=cfg.temporal_task_queue,
             workflows=[AnalystWorkflow],
             activities=[
-                prepare_analysis, profile_source, execute_agent_team,
+                prepare_analysis, profile_source, supervise_analysis,
+                discover_schema, plan_analysis, execute_analysis,
                 review_analysis, publish_analysis, deliver_report,
             ],
             activity_executor=executor,

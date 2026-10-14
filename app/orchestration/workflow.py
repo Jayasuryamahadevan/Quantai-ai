@@ -14,12 +14,14 @@ from temporalio.common import RetryPolicy
 
 with workflow.unsafe.imports_passed_through():
     from app.orchestration.activities import (
-        execute_agent_team,
         deliver_report,
         profile_source,
         prepare_analysis,
         publish_analysis,
         review_analysis,
+    )
+    from app.orchestration.specialists import (
+        supervise_analysis, discover_schema, plan_analysis, execute_analysis,
     )
 
 
@@ -67,6 +69,7 @@ class AnalystWorkflow:
                 maximum_attempts=attempts,
             ),
         )
+        self._progress.setdefault("completed_stages", []).append(stage)
         return result
 
     @workflow.run
@@ -82,8 +85,22 @@ class AnalystWorkflow:
             "data_profiling", profile_source, context,
             timeout=timedelta(seconds=60),
         )
+        await self._step(
+            "business_supervisor", supervise_analysis, context,
+            timeout=timedelta(minutes=4), attempts=2,
+            heartbeat_timeout=timedelta(minutes=3),
+        )
+        await self._step(
+            "source_discovery", discover_schema, context,
+            timeout=timedelta(minutes=3),
+        )
+        await self._step(
+            "semantic_planning", plan_analysis, context,
+            timeout=timedelta(minutes=8), attempts=2,
+            heartbeat_timeout=timedelta(minutes=3),
+        )
         analysis = await self._step(
-            "specialist_agents", execute_agent_team, context,
+            "query_execution_and_insight", execute_analysis, context,
             timeout=timedelta(minutes=30), attempts=2,
             heartbeat_timeout=timedelta(minutes=4),
         )
