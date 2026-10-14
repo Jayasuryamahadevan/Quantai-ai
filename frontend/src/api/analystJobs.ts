@@ -7,6 +7,7 @@ export interface AnalystJob {
   status: string;
   execution_status?: string;
   stage?: string;
+  completed_stages?: string[];
   review_reasons?: string[];
   review?: { outcome: string; reasons: string[] };
   publication?: { status: string; history_path: string };
