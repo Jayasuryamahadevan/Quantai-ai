@@ -293,14 +293,16 @@ def deliver_report(request: dict[str, Any]) -> dict[str, Any]:
     """
     from pathlib import Path
     from sqlalchemy import select
+    from app.config import get_settings
     from app.export.router import handle_export
+    from app.orchestration.report_store import approved_report_path
     from app.storage.database import app_session
     from app.storage.models import Export, QueryRun
 
     run_id = request["run_id"]
     output_format = request.get("format", "pdf")
-    if output_format not in ("pdf", "xlsx", "csv"):
-        raise ApplicationError("Unsupported export format", non_retryable=True)
+    if output_format != "pdf":
+        raise ApplicationError("The durable report activity supports PDF only", non_retryable=True)
 
     with app_session() as db:
         run = db.get(QueryRun, run_id)
@@ -313,7 +315,12 @@ def deliver_report(request: dict[str, Any]) -> dict[str, Any]:
                 Export.run_id == run_id, Export.format == output_format
             ).order_by(Export.created_at.desc()).limit(1)
         ).scalar_one_or_none()
-        if previous and Path(previous.file_path).is_file():
+        if previous:
+            try:
+                approved_report_path(previous.file_path, get_settings().exports_dir)
+            except (ValueError, OSError) as exc:
+                # Never silently regenerate a recorded artifact from mutable source data.
+                raise ApplicationError("Recorded report artifact is missing or invalid", non_retryable=True) from exc
             return {
                 "status": "ready",
                 "format": output_format,
@@ -322,9 +329,7 @@ def deliver_report(request: dict[str, Any]) -> dict[str, Any]:
 
     activity.heartbeat({"role": "report_author", "phase": "generating"})
     response = asyncio.run(handle_export(run_id, output_format))
-    report_file = Path(response.path)
-    if not report_file.is_file():
-        raise RuntimeError("Report generator returned a missing artifact")
+    report_file = approved_report_path(str(response.path), get_settings().exports_dir)
 
     with app_session() as db:
         latest = db.execute(
