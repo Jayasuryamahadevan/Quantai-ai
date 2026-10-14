@@ -4,37 +4,27 @@
 
 Temporal is the durable **job supervisor**, not the reasoning engine:
 it persists activity results, handles retries, survives API/worker restarts,
-tracks progress and waits for human decisions. LangGraph already implements
-dependent domain agents. Running the complete existing LangGraph graph inside
-**one Temporal activity** is deliberate: current result DataFrames are
-process-local and cannot safely move between workers. Isolating the full graph
-also keeps large DataFrames and raw SQL results **out of Temporal history**.
+tracks progress and waits for human decisions. Existing specialist agents now
+execute through **separate checkpointed business, discovery and planning roles**.
+SQL execution through insight generation remains in one activity until a
+versioned, shared result store replaces process-local DataFrames. The Temporal
+history only includes small decisions, not full catalogs or raw result frames.
+See [role-level recovery architecture](durable-specialist-architecture.md).
 
-```text
-                         FASTAPI API (localhost by default)
-          POST /api/analysis/jobs | GET /{job_id} | review | cancel
-                                        |
-                                  Temporal Server
-                                        |
-                              AnalystWorkflow (durable)
-                                        |
-                        prepare_analysis (source metadata)
-                                        |
-                   execute_agent_team (LangGraph, one activity)
-                      |       |       |         |          |
-                supervisor  schema   planner    SQL        verify
-                            selector           engine      & insight
-                                        |
-                        review_analysis (policy QA)
-                               /             \
-                      approved          needs_approval
-                         |                    |
-                         |            Temporal approval signal
-                         |                    |
-                        publish_analysis (database idempotency)
-                                        |
-                                  GET history by run_id
-```
+\`\`\`text
+FastAPI (trusted localhost only) → Temporal AnalystWorkflow
+    |
+    + prepare_analysis (pin source, validate session)
+    + profile_source (data quality/PII)
+    + supervise_analysis [checkpoint: business understanding]
+    + discover_schema [checkpoint: source and column catalog]
+    + plan_analysis [checkpoint: semantic/KPI plan]
+    + execute_analysis [SQL guard → query → cross-check/repair
+                        → cleaner → statistics → visualization → insight]
+    + review_analysis [policy QA; human review when required]
+    + publish_analysis [history persisted, transient checkpoints deleted]
+    + optional deliver_report [approved PDF artifact]
+\`\`\`
 
 ## Analyst responsibility matrix
 
@@ -64,8 +54,12 @@ also keeps large DataFrames and raw SQL results **out of Temporal history**.
 - Database QueryRun and Message records are the authoritative query-history
   artifacts; writing them is retried idempotently against run_id.
 - `prepare_analysis` pins the chosen source_id at workflow start.
-- `execute_agent_team` reuses the prior persisted run when retried, and
-  calls `activity.heartbeat` after graph node progress.
+- `supervise_analysis`, `discover_schema`, and `plan_analysis`
+  checkpoint small MySQL metadata so committed roles are not rerun on retry.
+- `execute_analysis` keeps process-local DataFrames in one activity, heartbeats
+  during LLM calls, and persists the resulting QueryRun idempotently.
+- After the final publication decision, temporary analyst checkpoints are
+  deleted; cancelled/failed runs still need an expiry sweep.
 - The quality gate rejects missing results/errors, asks for clarification
   when ambiguous, and requires human approval for PII, unverified SQL,
   low confidence, grounding problems and free-form fallback.
@@ -83,16 +77,11 @@ Terminal 1:
 temporal server start-dev
 ```
 
-Terminal 2:
+Terminal 2 (start the API first so its metadata tables, including
+`analyst_checkpoints`, exist):
 
 ```bash
 pip install -r requirements.txt
-python -m app.orchestration.worker
-```
-
-Terminal 3:
-
-```bash
 # .env (keep API on localhost, NEVER expose unauthenticated)
 TEMPORAL_ENABLED=true
 TEMPORAL_ADDRESS=127.0.0.1:7233
@@ -100,6 +89,12 @@ TEMPORAL_NAMESPACE=default
 TEMPORAL_TASK_QUEUE=quantai-analyst
 
 uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+Terminal 3 (start separately after the API has initialized its metadata DB):
+
+```bash
+python -m app.orchestration.worker
 ```
 
 Temporal Web UI: http://localhost:8233
