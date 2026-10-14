@@ -10,7 +10,7 @@ export interface AnalystJob {
   review_reasons?: string[];
   review?: { outcome: string; reasons: string[] };
   publication?: { status: string; history_path: string };
-  report?: { status: string; download_url?: string } | null;
+  report?: { status: string; download_url?: string; reason?: string } | null;
 }
 
 async function request<T>(path: string, body?: unknown): Promise<T> {
