@@ -80,3 +80,34 @@ def test_rejected_result_is_not_auto_published_as_success(monkeypatch):
         assert result["status"] == "rejected"
 
     asyncio.run(run())
+
+
+def test_optional_report_failure_preserves_approved_analysis(monkeypatch):
+    stages = []
+
+    async def execute(fn, payload, **kwargs):
+        stages.append(fn.__name__)
+        if fn.__name__ == "prepare_analysis":
+            return {"run_id": "run1", "source_id": "source1", "include_report": True}
+        if fn.__name__ == "profile_source":
+            return {"pii_columns": 0, "catalog_present": True}
+        if fn.__name__ == "execute_agent_team":
+            return {"insight_present": True, "verified": True}
+        if fn.__name__ == "review_analysis":
+            return {"outcome": "approved", "reasons": []}
+        if fn.__name__ == "publish_analysis":
+            return {"run_id": "run1", "status": "success"}
+        if fn.__name__ == "deliver_report":
+            raise RuntimeError("Report renderer unavailable")
+        raise AssertionError("Unknown activity")
+
+    monkeypatch.setattr(wf.workflow, "execute_activity", execute)
+
+    async def run():
+        result = await wf.AnalystWorkflow().run({"run_id": "run1"})
+        assert result["status"] == "completed"
+        assert result["publication"]["status"] == "success"
+        assert result["report"]["status"] == "failed"
+
+    asyncio.run(run())
+    assert stages[-2:] == ["publish_analysis", "deliver_report"]
