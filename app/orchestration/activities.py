@@ -44,6 +44,8 @@ def _existing_analysis(run_id: str, question: str, source_id: str) -> dict[str, 
             "errors": bool(run.error_message),
             "clarification_question": quality.get("clarification_question"),
             "grounding_issues": bool(quality.get("grounding_issues")),
+            "number_check_valid": quality.get("number_check_valid"),
+            "intent": quality.get("intent"),
             "row_count": run.row_count,
         }
 
@@ -244,7 +246,7 @@ def publish_analysis(request: dict[str, Any]) -> dict[str, Any]:
     """Idempotently finalize metadata and publish approved chat messages."""
     from sqlalchemy import select
     from app.storage.database import app_session
-    from app.storage.models import Message, QueryRun
+    from app.storage.models import AnalystCheckpoint, Message, QueryRun
 
     outcome = request["outcome"]
     statuses = {
@@ -279,6 +281,11 @@ def publish_analysis(request: dict[str, Any]) -> dict[str, Any]:
                     Message(session_id=run.session_id, role="assistant",
                             content=run.insight_text or "", run_id=run.id),
                 ])
+        # Privacy: no further specialist replay is required after the final
+        # publication decision. Retain only limited quality metadata on QueryRun.
+        checkpoint = db.get(AnalystCheckpoint, run.id)
+        if checkpoint is not None:
+            db.delete(checkpoint)
     return {"run_id":request["run_id"],"status":status,
             "history_path":f"/api/history/{request['run_id']}"}
 
