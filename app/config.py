@@ -88,6 +88,13 @@ class Settings(BaseSettings):
     secret_key: str = "change_me_to_random_32_char_string"
 
     # ── Telemetry (always off) ───────────────────────────────────────────────
+    # Temporal runs separately; API remains local-only until auth is added.
+    temporal_enabled: bool = False
+    temporal_address: str = "127.0.0.1:7233"
+    temporal_namespace: str = "default"
+    temporal_task_queue: str = "quantai-analyst"
+    temporal_max_concurrent_activities: int = 1
+
     langchain_tracing_v2: bool = False
     langchain_api_key: str = "disabled"
     anonymized_telemetry: bool = False
