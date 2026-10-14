@@ -159,6 +159,11 @@ export const DurableAnalysisDialog: React.FC<Props> = ({ sourceId, onClose, onOp
                   onClick={() => void review(false)}>Reject</button>
               </div>
             )}
+            {finalStatus === 'completed' && job.report?.status === 'failed' && (
+              <p role="alert" className="text-sm text-amber-200">
+                {job.report.reason || 'Your approved analysis is saved, but the report could not be generated.'}
+              </p>
+            )}
             {finalStatus === 'completed' && job.report?.status === 'ready' && job.report.download_url && (
               <a href={job.report.download_url} className="btn-ghost inline-flex px-4 py-2 text-xs">
                 Export approved report
