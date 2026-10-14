@@ -41,6 +41,10 @@ def test_ambiguity_is_not_reported_as_success():
 def test_dataset_overview_does_not_require_sql_verification():
     assert decide_review(baseline(generated_sql=False, verified=False))["outcome"] == "approved"
 
+def test_inaccurate_numbers_require_review():
+    assert decide_review(baseline(number_check_valid=False))["outcome"] == "needs_approval"
+
+
 def test_missing_catalog_requires_review():
     result = decide_review(baseline(catalog_present=False))
     assert result["outcome"] == "needs_approval"
