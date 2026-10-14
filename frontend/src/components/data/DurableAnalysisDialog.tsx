@@ -147,7 +147,7 @@ export const DurableAnalysisDialog: React.FC<Props> = ({ sourceId, onClose, onOp
                     <li key={stage}>✓ {stage.replace(/_/g, ' ')}</li>
                   ))}
                 </ol>
-              )
+              )}
               <p className="mt-2 break-all text-[11px] text-slate-500">{jobId}</p>
             </div>
             {job.review_reasons && job.review_reasons.length > 0 && (
