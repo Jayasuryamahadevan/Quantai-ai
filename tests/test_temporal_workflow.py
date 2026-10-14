@@ -13,7 +13,9 @@ def _activities(monkeypatch, outcome):
             return {"run_id": "run1", "source_id": "source1"}
         if fn.__name__ == "profile_source":
             return {"pii_columns": 0, "catalog_present": True}
-        if fn.__name__ == "execute_agent_team":
+        if fn.__name__ in ("supervise_analysis", "discover_schema", "plan_analysis"):
+            return {"run_id": "run1", "route": "continue"}
+        if fn.__name__ == "execute_analysis":
             return {"run_id": "run1", "insight_present": True}
         if fn.__name__ == "review_analysis":
             return {"outcome": outcome, "reasons": [] if outcome == "approved" else ["Needs verification"]}
@@ -38,7 +40,8 @@ def test_verified_job_runs_activities_in_order(monkeypatch):
 
     asyncio.run(run())
     assert stages == [
-        "prepare_analysis", "profile_source", "execute_agent_team",
+        "prepare_analysis", "profile_source", "supervise_analysis",
+        "discover_schema", "plan_analysis", "execute_analysis",
         "review_analysis", "publish_analysis",
     ]
 
@@ -91,7 +94,7 @@ def test_optional_report_failure_preserves_approved_analysis(monkeypatch):
             return {"run_id": "run1", "source_id": "source1", "include_report": True}
         if fn.__name__ == "profile_source":
             return {"pii_columns": 0, "catalog_present": True}
-        if fn.__name__ == "execute_agent_team":
+        if fn.__name__ == "execute_analysis":
             return {"insight_present": True, "verified": True}
         if fn.__name__ == "review_analysis":
             return {"outcome": "approved", "reasons": []}
