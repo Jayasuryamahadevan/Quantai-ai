@@ -163,3 +163,19 @@ class Settings(Base):
     key: Mapped[str] = mapped_column(String(128), primary_key=True)
     value: Mapped[str] = mapped_column(Text)
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class AnalystCheckpoint(Base):
+    """Durable compact specialist state for replay-safe Temporal stage boundaries.
+
+    The state contains metadata, plans and trace details, never Pandas frames.
+    Dedicated cleanup/retention is required before multi-tenant deployment.
+    """
+    __tablename__ = "analyst_checkpoints"
+
+    run_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    completed_stages: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    state_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )
