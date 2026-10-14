@@ -8,6 +8,7 @@ to execution activity. Side effects never occur in workflow code.
 from __future__ import annotations
 
 import asyncio
+from contextlib import suppress
 from typing import Any, Awaitable, Callable
 
 from temporalio import activity
@@ -19,8 +20,22 @@ Role = Callable[[dict[str, Any]], Awaitable[dict[str, Any]]]
 
 
 async def _run_node(state: dict[str, Any], role: Role, name: str) -> None:
-    activity.heartbeat({"agent": name})
-    delta = await role(state)
+    # Long-running local models need a heartbeat while they are generating,
+    # not only between agents. Temporal cancellation is delivered via heartbeat.
+    activity.heartbeat({"agent": name, "status": "running"})
+
+    async def pulse() -> None:
+        while True:
+            await asyncio.sleep(20)
+            activity.heartbeat({"agent": name, "status": "running"})
+
+    keepalive = asyncio.create_task(pulse())
+    try:
+        delta = await role(state)
+    finally:
+        keepalive.cancel()
+        with suppress(asyncio.CancelledError):
+            await keepalive
     if not isinstance(delta, dict):
         raise ApplicationError(f"{name} returned an invalid state update", non_retryable=True)
     state.update(delta)
