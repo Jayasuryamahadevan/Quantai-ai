@@ -117,12 +117,21 @@ class AnalystWorkflow:
 
         report = None
         if outcome == "approved" and context.get("include_report"):
-            report = await self._step(
-                "stakeholder_report", deliver_report,
-                {"run_id": run_id, "format": "pdf"},
-                timeout=timedelta(minutes=15), attempts=2,
-                heartbeat_timeout=timedelta(minutes=4),
-            )
+            try:
+                report = await self._step(
+                    "stakeholder_report", deliver_report,
+                    {"run_id": run_id, "format": "pdf"},
+                    timeout=timedelta(minutes=15), attempts=2,
+                    heartbeat_timeout=timedelta(minutes=4),
+                )
+            except Exception:
+                # A reporting failure must not discard a previously approved
+                # and persisted analysis. Cancellation is never suppressed:
+                # asyncio.CancelledError derives from BaseException.
+                report = {
+                    "status": "failed",
+                    "reason": "The approved analysis is saved, but its report could not be generated.",
+                }
 
         status = "completed" if outcome == "approved" else outcome
         self._progress.update({"status": status, "stage": "done"})
