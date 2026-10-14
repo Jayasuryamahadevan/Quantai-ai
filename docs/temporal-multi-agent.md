@@ -133,7 +133,18 @@ curl -X POST http://127.0.0.1:8000/api/analysis/jobs/quantai-analysis-<uuid>/rev
 ```
 
 Cancel similarly with POST `/cancel`. Once approved, read the answer through
-`/api/history/<run_id>` and generate exports through existing endpoints.
+`/api/history/<run_id>`. If a PDF report was requested and produced, download
+the exact saved artifact at `GET /api/analysis/jobs/reports/<run_id>`:
+this route checks the approved run, checks the recorded file path stays within
+the configured export directory, and **does not re-execute SQL**. If a saved
+file disappears, the report activity fails without silently rebuilding it
+from mutable data, while the approved analytical answer remains available.
+
+**Snapshot limitation:** the existing export renderer executes the saved SQL
+when generating a *new* PDF. If underlying data changes between the analysis
+and initial report generation, values can differ. Before enterprise rollout,
+persist a versioned query-result snapshot, then derive all charts/reports from
+that immutable snapshot. Other ad-hoc export endpoints still re-execute SQL.
 
 ## Security/operational limitations before production
 
