@@ -25,6 +25,8 @@ def decide_review(analysis: dict[str, Any]) -> dict[str, Any]:
         reasons.append("Free-form model-generated SQL was used.")
     if analysis.get("grounding_issues"):
         reasons.append("Some values could not be grounded against the source.")
+    if analysis.get("number_check_valid") is False:
+        reasons.append("The generated narrative failed numerical verification.")
     if analysis.get("confidence") == "Low":
         reasons.append("The analysis has low confidence.")
 
