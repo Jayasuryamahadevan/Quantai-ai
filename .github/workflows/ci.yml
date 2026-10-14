@@ -23,6 +23,38 @@ jobs:
         env:
           RUN_TEMPORAL_TEST_SERVER: '1'
         run: python -m pytest -q tests/test_temporal_integration.py
+  mysql-checkpoints:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: testpass
+          MYSQL_DATABASE: quantai_app
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -ptestpass"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      MYSQL_HOST: 127.0.0.1
+      MYSQL_PORT: '3306'
+      MYSQL_APP_SCHEMA: quantai_app
+      MYSQL_APP_USER: root
+      MYSQL_APP_PASSWORD: testpass
+      RUN_MYSQL_CHECKPOINT_TESTS: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install MySQL test dependencies
+        run: python -m pip install pytest SQLAlchemy PyMySQL pydantic pydantic-settings temporalio
+      - name: Validate persisted specialist checkpoints
+        run: python -m pytest -q tests/test_analyst_checkpoints_mysql.py
+
   frontend:
     runs-on: ubuntu-latest
     defaults:
