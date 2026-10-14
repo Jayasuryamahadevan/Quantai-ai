@@ -78,6 +78,9 @@ def create_app() -> FastAPI:
     
     from app.api.docs_router import router as docs_router
     app.include_router(docs_router)
+    if cfg.temporal_enabled:
+        from app.api.analysis_jobs import router as analysis_jobs_router
+        app.include_router(analysis_jobs_router)
 
     # CORS: localhost only
     app.add_middleware(

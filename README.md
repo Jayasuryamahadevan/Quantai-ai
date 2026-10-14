@@ -81,3 +81,27 @@ npm run dev
 ```
 
 Visit `http://localhost:5173` to start chatting with your data!
+
+---
+
+## Durable Multi-Agent Analyst (Temporal, opt-in)
+
+QuantAI now supports durable analytical jobs using **Temporal for orchestration**
+and the existing **LangGraph specialists** for reasoning. Jobs survive API/worker
+restarts, expose progress and cancellation, apply an independent QA gate, wait
+for human review of uncertain or potentially sensitive outputs, and can produce
+PDF reports after approval.
+
+See [Temporal architecture, roles and local setup](docs/temporal-multi-agent.md)
+for startup commands, workflow states, testing evidence and production risks.
+
+The existing `/api/query` chat remains available unchanged. To enable durable
+analyses on your local machine, start a Temporal development server, run
+`python -m app.orchestration.worker`, and set `TEMPORAL_ENABLED=true` in
+the backend `.env`. Set `VITE_ENABLE_TEMPORAL_ANALYSIS=true` in
+`frontend/.env.local` to reveal the "Durable analyst" UI.
+
+> **Deployment boundary:** This is a tested incremental foundation, not an
+> internet-facing multi-tenant product. The repository still needs user
+> authentication, authorization, shared artifacts, production Temporal
+> persistence and full MySQL/Ollama end-to-end tests before production use.

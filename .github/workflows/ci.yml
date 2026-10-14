@@ -14,11 +14,15 @@ jobs:
           python-version: '3.11'
       - run: python -m pip install --upgrade pip
       - name: Install lightweight test dependencies
-        run: python -m pip install pytest SQLAlchemy pydantic pydantic-settings sqlglot
+        run: python -m pip install pytest SQLAlchemy pydantic pydantic-settings sqlglot temporalio
       - name: Compile source and tests
         run: python -m compileall -q app scripts tests
       - name: Unit tests
         run: python -m pytest -q tests
+      - name: Temporal workflow integration smoke test
+        env:
+          RUN_TEMPORAL_TEST_SERVER: '1'
+        run: python -m pytest -q tests/test_temporal_integration.py
   frontend:
     runs-on: ubuntu-latest
     defaults:

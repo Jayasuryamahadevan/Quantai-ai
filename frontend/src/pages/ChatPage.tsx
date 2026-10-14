@@ -8,6 +8,7 @@ import { ChatInput } from '../components/chat/ChatInput';
 import { MessageBubble } from '../components/chat/MessageBubble';
 import { UploadDialog } from '../components/data/UploadDialog';
 import { DatasetReportDialog } from '../components/data/DatasetReportDialog';
+import { DurableAnalysisDialog } from '../components/data/DurableAnalysisDialog';
 import { ThemeToggle } from '../components/ui/ThemeToggle';
 import { DataPreviewPanel } from './panels/DataPreviewPanel';
 import { HistoryPanel } from './panels/HistoryPanel';
@@ -27,6 +28,7 @@ export const ChatPage: React.FC<Props> = ({ onNavigate }) => {
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [summaryError, setSummaryError] = useState<string | null>(null);
   const [reportDialogOpen, setReportDialogOpen] = useState(false);
+  const [durableDialogOpen, setDurableDialogOpen] = useState(false);
 
   const {
     messages, clearMessages,
@@ -169,6 +171,14 @@ export const ChatPage: React.FC<Props> = ({ onNavigate }) => {
                 className="btn-ghost text-xs rounded-lg border border-white/[0.06]"
               >
                 {documentMode ? 'Use dataset chat' : 'Ask documents'}
+              </button>
+            )}
+            {selectedSource && !documentMode && !demoMode && import.meta.env.VITE_ENABLE_TEMPORAL_ANALYSIS === 'true' && (
+              <button
+                onClick={() => setDurableDialogOpen(true)}
+                className="btn-ghost text-xs rounded-lg border border-emerald-300/15 text-emerald-200"
+              >
+                <Sparkles className="h-3.5 w-3.5" /> Durable analyst
               </button>
             )}
             {selectedSource && !documentMode && (
@@ -370,6 +380,18 @@ export const ChatPage: React.FC<Props> = ({ onNavigate }) => {
           )}
         </div>
       </div>
+
+      {durableDialogOpen && selectedSourceId && (
+        <DurableAnalysisDialog
+          sourceId={selectedSourceId}
+          onClose={() => setDurableDialogOpen(false)}
+          onOpenRun={(runId) => {
+            void openHistoryRun(runId).catch((error) => {
+              setSummaryError(error instanceof Error ? error.message : 'Could not open analysis');
+            });
+          }}
+        />
+      )}
 
       {/* Upload dialog */}
       {uploadDialogOpen && (
