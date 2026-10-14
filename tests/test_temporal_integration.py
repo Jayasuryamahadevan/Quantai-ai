@@ -20,7 +20,7 @@ async def fake_prepare(request):
     return {
         "run_id": request["run_id"],
         "source_id": "mock-source",
-        "include_report": False,
+        "include_report": bool(request.get("include_report")),
     }
 
 
@@ -78,12 +78,13 @@ def test_durable_workflow_runs_on_real_temporal_test_server():
             ):
                 result = await environment.client.execute_workflow(
                     AnalystWorkflow.run,
-                    {"run_id": "test-run-001"},
+                    {"run_id": "test-run-001", "include_report": True},
                     id="quantai-test-run-001",
                     task_queue="quantai-tests",
                 )
                 assert result["status"] == "completed"
                 assert result["source_id"] == "mock-source"
                 assert result["publication"]["status"] == "success"
+                assert result["report"]["status"] == "ready"
 
     asyncio.run(run())
