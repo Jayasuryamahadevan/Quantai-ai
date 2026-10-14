@@ -35,7 +35,22 @@ async def fake_profile(context):
     }
 
 
-@activity.defn(name="execute_agent_team")
+@activity.defn(name="supervise_analysis")
+async def fake_supervise(context):
+    return {"run_id": context["run_id"], "route": "continue"}
+
+
+@activity.defn(name="discover_schema")
+async def fake_discover(context):
+    return {"run_id": context["run_id"], "route": "continue"}
+
+
+@activity.defn(name="plan_analysis")
+async def fake_plan(context):
+    return {"run_id": context["run_id"], "route": "continue", "planned": True}
+
+
+@activity.defn(name="execute_analysis")
 async def fake_agents(context):
     return {
         "run_id": context["run_id"],
@@ -72,8 +87,8 @@ def test_durable_workflow_runs_on_real_temporal_test_server():
                 task_queue="quantai-tests",
                 workflows=[AnalystWorkflow],
                 activities=[
-                    fake_prepare, fake_profile, fake_agents,
-                    fake_review, fake_publish, fake_report,
+                    fake_prepare, fake_profile, fake_supervise, fake_discover,
+                    fake_plan, fake_agents, fake_review, fake_publish, fake_report,
                 ],
             ):
                 result = await environment.client.execute_workflow(
