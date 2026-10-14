@@ -11,7 +11,7 @@ versioned, shared result store replaces process-local DataFrames. The Temporal
 history only includes small decisions, not full catalogs or raw result frames.
 See [role-level recovery architecture](durable-specialist-architecture.md).
 
-\`\`\`text
+```text
 FastAPI (trusted localhost only) → Temporal AnalystWorkflow
     |
     + prepare_analysis (pin source, validate session)
@@ -24,7 +24,7 @@ FastAPI (trusted localhost only) → Temporal AnalystWorkflow
     + review_analysis [policy QA; human review when required]
     + publish_analysis [history persisted, transient checkpoints deleted]
     + optional deliver_report [approved PDF artifact]
-\`\`\`
+```
 
 ## Analyst responsibility matrix
 
