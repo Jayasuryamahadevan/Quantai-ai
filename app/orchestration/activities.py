@@ -317,7 +317,7 @@ def deliver_report(request: dict[str, Any]) -> dict[str, Any]:
             return {
                 "status": "ready",
                 "format": output_format,
-                "download_url": f"/api/export/{run_id}?format={output_format}",
+                "download_url": f"/api/analysis/jobs/reports/{run_id}",
             }
 
     activity.heartbeat({"role": "report_author", "phase": "generating"})
@@ -344,5 +344,5 @@ def deliver_report(request: dict[str, Any]) -> dict[str, Any]:
     return {
         "status": "ready",
         "format": output_format,
-        "download_url": f"/api/export/{run_id}?format={output_format}",
+        "download_url": f"/api/analysis/jobs/reports/{run_id}",
     }
