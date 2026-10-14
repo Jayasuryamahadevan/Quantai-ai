@@ -106,8 +106,10 @@ async def get_approved_report(run_id: UUID, request: Request):
     from app.storage.database import app_session
     from app.storage.models import Export, QueryRun
 
-    # The durable API is disabled by default and restricted to trusted local use.
-    await _client(request)
+    # Already-approved artifacts stay accessible if Temporal is temporarily down.
+    # Deployment remains loopback-only pending per-user authentication.
+    if not get_settings().temporal_enabled:
+        raise HTTPException(503, "Durable analysis is disabled")
     run_key = str(run_id)
     with app_session() as db:
         run = db.get(QueryRun, run_key)
